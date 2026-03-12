@@ -5,8 +5,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 const CREDENTIALS = {
-    username: "Junaid133",
-    password: "Junaid133"
+    username: "Junaidnizaa",
+    password: "Junaidnizaa"
 };
 
 const BASE_URL = "http://51.89.99.105/NumberPanel";
@@ -92,12 +92,31 @@ async function performLogin() {
 
 setInterval(() => { performLogin(); }, 120000);
 
+async function fetchData(targetUrl, specificReferer) {
+    const response = await axios.get(targetUrl, {
+        headers: { ...COMMON_HEADERS, "Cookie": STATE.cookie, "Referer": specificReferer },
+        responseType: 'arraybuffer',
+        timeout: 25000
+    });
+
+    const checkData = response.data.subarray(0, 200).toString();
+
+    // ✅ FIX: Sirf <html check karein, 'login' word nahi (SMS mein hota hai)
+    if (checkData.trim().startsWith('<')) {
+        return null; // Session expired
+    }
+
+    return response.data;
+}
+
 app.get('/api', async (req, res) => {
     const { type } = req.query;
+
     if (!STATE.cookie || !STATE.sessKey) {
         await performLogin();
         if (!STATE.sessKey) return res.status(500).json({ error: "Waiting for Login..." });
     }
+
     const ts = Date.now();
     const today = getTodayDate();
     let targetUrl = "", specificReferer = "";
@@ -105,10 +124,7 @@ app.get('/api', async (req, res) => {
     if (type === 'numbers') {
         specificReferer = `${BASE_URL}/client/MySMSNumbers`;
         targetUrl = `${BASE_URL}/client/res/data_smsnumbers.php?frange=&fclient=&sEcho=2&iColumns=6&sColumns=%2C%2C%2C%2C%2C&iDisplayStart=0&iDisplayLength=-1&mDataProp_0=0&sSearch_0=&bRegex_0=false&bSearchable_0=true&bSortable_0=true&mDataProp_1=1&sSearch_1=&bRegex_1=false&bSearchable_1=true&bSortable_1=true&mDataProp_2=2&sSearch_2=&bRegex_2=false&bSearchable_2=true&bSortable_2=true&mDataProp_3=3&sSearch_3=&bRegex_3=false&bSearchable_3=true&bSortable_3=true&mDataProp_4=4&sSearch_4=&bRegex_4=false&bSearchable_4=true&bSortable_4=true&mDataProp_5=5&sSearch_5=&bRegex_5=false&bSearchable_5=true&bSortable_5=true&sSearch=&bRegex=false&iSortCol_0=0&sSortDir_0=asc&iSortingCols=1&_=${ts}`;
-    } else if (type === 'sms') {
-        specificReferer = `${BASE_URL}/client/SMSCDRStats`;
-        targetUrl = `${BASE_URL}/client/res/data_smscdr.php?fdate1=${today}%2000:00:00&fdate2=${today}%2023:59:59&frange=&fnum=&fcli=&fgdate=&fgmonth=&fgrange=&fgnumber=&fgcli=&fg=0&sesskey=${STATE.sessKey}&sEcho=2&iColumns=7&sColumns=%2C%2C%2C%2C%2C%2C&iDisplayStart=0&iDisplayLength=-1&mDataProp_0=0&sSearch_0=&bRegex_0=false&bSearchable_0=true&bSortable_0=true&mDataProp_1=1&sSearch_1=&bRegex_1=false&bSearchable_1=true&bSortable_1=true&mDataProp_2=2&sSearch_2=&bRegex_2=false&bSearchable_2=true&bSortable_2=true&mDataProp_3=3&sSearch_3=&bRegex_3=false&bSearchable_3=true&bSortable_3=true&mDataProp_4=4&sSearch_4=&bRegex_4=false&bSearchable_4=true&bSortable_4=true&mDataProp_5=5&sSearch_5=&bRegex_5=false&bSearchable_5=true&bSortable_5=true&mDataProp_6=6&sSearch_6=&bRegex_6=false&bSearchable_6=true&bSortable_6=true&sSearch=&bRegex=false&iSortCol_0=0&sSortDir_0=desc&iSortingCols=1&_=${ts}`;
-    } else if (type === 'new-sms') {
+    } else if (type === 'sms' || type === 'new-sms') {
         specificReferer = `${BASE_URL}/client/SMSCDRStats`;
         targetUrl = `${BASE_URL}/client/res/data_smscdr.php?fdate1=${today}%2000:00:00&fdate2=${today}%2023:59:59&frange=&fnum=&fcli=&fgdate=&fgmonth=&fgrange=&fgnumber=&fgcli=&fg=0&sesskey=${STATE.sessKey}&sEcho=2&iColumns=7&sColumns=%2C%2C%2C%2C%2C%2C&iDisplayStart=0&iDisplayLength=-1&mDataProp_0=0&sSearch_0=&bRegex_0=false&bSearchable_0=true&bSortable_0=true&mDataProp_1=1&sSearch_1=&bRegex_1=false&bSearchable_1=true&bSortable_1=true&mDataProp_2=2&sSearch_2=&bRegex_2=false&bSearchable_2=true&bSortable_2=true&mDataProp_3=3&sSearch_3=&bRegex_3=false&bSearchable_3=true&bSortable_3=true&mDataProp_4=4&sSearch_4=&bRegex_4=false&bSearchable_4=true&bSortable_4=true&mDataProp_5=5&sSearch_5=&bRegex_5=false&bSearchable_5=true&bSortable_5=true&mDataProp_6=6&sSearch_6=&bRegex_6=false&bSearchable_6=true&bSortable_6=true&sSearch=&bRegex=false&iSortCol_0=0&sSortDir_0=desc&iSortingCols=1&_=${ts}`;
     } else {
@@ -117,30 +133,35 @@ app.get('/api', async (req, res) => {
 
     try {
         console.log(`📡 Fetching: ${type}`);
-        const response = await axios.get(targetUrl, {
-            headers: { ...COMMON_HEADERS, "Cookie": STATE.cookie, "Referer": specificReferer },
-            responseType: 'arraybuffer',
-            timeout: 25000
-        });
-        const checkData = response.data.subarray(0, 1000).toString();
-        if (checkData.includes('<html') || checkData.includes('login')) {
+
+        let data = await fetchData(targetUrl, specificReferer);
+
+        // ✅ Session expire hogi to auto login karke dobara try karega
+        if (data === null) {
+            console.log("⚠️ Session Expired. Re-logging in...");
             await performLogin();
-            return res.status(503).json({ error: "Session Refreshed. Try Again." });
+            data = await fetchData(targetUrl, specificReferer);
+            if (data === null) {
+                return res.status(503).json({ error: "Session error. Please try again." });
+            }
         }
+
         if (type === 'new-sms') {
             try {
-                const jsonData = JSON.parse(response.data.toString('utf-8'));
+                const jsonData = JSON.parse(data.toString('utf-8'));
                 const allRows = jsonData.aaData || [];
                 const newRows = allRows.filter(row => !STATE.lastSeenSmsIds.has(row[0]));
                 allRows.forEach(row => STATE.lastSeenSmsIds.add(row[0]));
                 return res.json({ newCount: newRows.length, newSms: newRows, date: today });
             } catch (e) {
                 res.set('Content-Type', 'application/json');
-                return res.send(response.data);
+                return res.send(data);
             }
         }
+
         res.set('Content-Type', 'application/json');
-        res.send(response.data);
+        res.send(data);
+
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
